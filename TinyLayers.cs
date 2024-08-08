@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,7 +15,6 @@ namespace TinyLayers {
 
 	public class Activation {
 		public static int Prec = 24;	// fixed-point decimal precision
-
 		public static int[] SigmoidLut;
 		public static int[] TanhLut;
 
@@ -114,15 +113,16 @@ namespace TinyLayers {
 				isNegative = true;
 				x = -x;
 			}
-			byte lutSelect = (byte)((x >> 24) & 0x07);
+			byte lutSelect = (byte)(x >> Prec);
 			int index;
-			if (lutSelect <= 0x01) index = (x >> 18);
-			else if (lutSelect <= 0x05) index = (x >> 20) + 96;
-			else index = (x >> 22) + 168;
+			if (lutSelect <= 0x01) index = (x >> Prec - 6);
+			else if (lutSelect <= 0x05) index = (x >> Prec - 4) + 96;
+			else index = (x >> Prec - 2) + 168;
+			if (index > 255) index = 255;
 			int folded = SigmoidLut[index];
 			if (isNegative) folded = -folded;
 			folded = folded + 128;
-			int scaled = folded >> 8;   // scale back to 8.24 fixed-poing
+			int scaled = folded << (Prec - 8);   // scale back to 16.16 fixed-poing
 			return scaled;
 		}
 
@@ -144,14 +144,15 @@ namespace TinyLayers {
 				isNegative = true;
 				x = -x;
 			}
-			byte lutSelect = (byte)((x >> 24) & 0x07);
+			byte lutSelect = (byte)(x >> Prec);
 			int index;
-			if (lutSelect <= 0x01) index = (x >> 18);
-			else if (lutSelect <= 0x05) index = (x >> 19) + 64;
-			else index = (x >> 22) + 176;
-			int folded = SigmoidLut[index];
+			if (lutSelect <= 0x01) index = (x >> Prec - 6);
+			else if (lutSelect <= 0x05) index = (x >> Prec - 5) + 64;
+			else index = (x >> Prec - 2) + 176;
+			if (index > 255) index = 255;
+			int folded = TanhLut[index];
 			if (isNegative) folded = -folded;
-			int scaled = folded >> 8;   // scale back to 8.24 fixed-poing
+			int scaled = folded << (Prec - 8);   // scale back to 16.16 fixed-poing
 			return scaled;
 		}
 
@@ -167,12 +168,12 @@ namespace TinyLayers {
 			for (i = 128; i < 192; i++) {
 				x = (float)i / 16f;
 				y = Sigmoid(x) * 255.5f;
-				SigmoidLut[i + 96] = (int)Math.Round(y, 0) - 128;
+				SigmoidLut[i] = (int)Math.Round(y, 0) - 128;
 			}
 			for (i = 192; i < 256; i++) {
 				x = (float)i / 4f;
 				y = Sigmoid(x) * 255.5f;
-				SigmoidLut[i + 168] = (int)Math.Round(y, 0) - 128;
+				SigmoidLut[i] = (int)Math.Round(y, 0) - 128;
 			}
 		}
 
@@ -182,18 +183,18 @@ namespace TinyLayers {
 			int i;
 			for (i = 0; i < 128; i++) {
 				x = (float)i / 128f;
-				y = Sigmoid(x) * 127f;
-				SigmoidLut[i] = (int)Math.Round(y, 0);
+				y = Tanh(x) * 127f;
+				TanhLut[i] = (int)Math.Round(y, 0);
 			}
 			for (i = 128; i < 192; i++) {
 				x = (float)i / 64f;
-				y = Sigmoid(x) * 127f;
-				SigmoidLut[i + 64] = (int)Math.Round(y, 0);
+				y = Tanh(x) * 127f;
+				TanhLut[i] = (int)Math.Round(y, 0);
 			}
 			for (i = 192; i < 256; i++) {
 				x = (float)i / 8f;
-				y = Sigmoid(x) * 127f;
-				SigmoidLut[i + 176] = (int)Math.Round(y, 0);
+				y = Tanh(x) * 127f;
+				TanhLut[i] = (int)Math.Round(y, 0);
 			}
 		}
 	}
@@ -208,13 +209,13 @@ namespace TinyLayers {
 			return sum;
 		}
 
-		public static int Dot(int[] a, int[] b) {
+		public static int Dot(int[] a, int[] b, int prec) {
 			Debug.Assert(a.Length == b.Length);
-			int sum = 0;
+			long sum = 0;
 			for (int i = 0; i < a.Length; i++) {
-				sum += a[i] * b[i];
+				sum += (long)a[i] * (long)b[i];
 			}
-			return sum;
+			return (int)(sum >> prec);
 		}
 
 		private static float Dot(float[,] a, float[,] b, int arow, int bcol) {
@@ -438,8 +439,8 @@ namespace TinyLayers {
 	}
 
 	public class BaseLayer {
-		protected int InDims;   // input dims
-		protected int OutDims;   // output dims = # of neurons
+		public int InDims;   // input dims
+		public int OutDims;   // output dims = # of neurons
 		public float[] InputArray; // Input layer array
 		public float[] OutputArray; // output layer array
 		public float[] ActivationArray; // output activation array
@@ -447,21 +448,22 @@ namespace TinyLayers {
 		public float[][] WeightDeltas;
 		public float[] ActivationDeltas;
 		public float[] Bias;
-		protected static bool QuantAwareTrain;
-		protected bool Quantized;
+		public static bool QuantAwareTrain;
+		public bool Quantized;
 		public int[] InputArrayInt; // input layer array
 		public int[] OutputArrayInt; // output layer array
 		public int[] ActivationArrayInt; // output activation array
-		protected int[][] WeightArrayInt;
-		protected int[] BiasInt;
+		public int[][] WeightArrayInt;
+		public int[] BiasInt;
 		public LayerType LayerID;
 		public BiasType UseBias;
 		public static Random Randomizer;
-		protected const int QuantFactor = 1 << 24; // float 1.0 = int 2^24, 8.24 fixed-point
+		public static int Prec = 24;    // fixed-point decimal precision
+		public int QuantFactor = 1 << Prec; // float 1.0 = int 2^16, 16.16 fixed-point
 
 		public ActivationType OutputActivation;
 		public static float LearningRate;
-		protected BaseLayer UpLayer, DownLayer;
+		public BaseLayer UpLayer, DownLayer;
 		public float[] Delta;
 
 		public static bool QAT {        // Turn QAT on/off (affects all layers)
@@ -489,6 +491,10 @@ namespace TinyLayers {
 			Quantized = false;
 			OutputActivation = ActivationType.Linear;
 			UseBias = useBias;
+			OutputArrayInt = new int[OutDims];
+			ActivationArrayInt = new int[OutDims];
+			WeightArrayInt = new int[OutDims][];
+			BiasInt = new int[OutDims];
 		}
 
 		public void Link(BaseLayer upLayer) {
@@ -496,11 +502,14 @@ namespace TinyLayers {
 			if (UpLayer != null) {
 				InDims = upLayer.OutDims;
 				InputArray = UpLayer.ActivationArray;
+				InputArrayInt = UpLayer.ActivationArrayInt;
 			} else {	// for InputLayer only
 				InputArray = new float[InDims];
+				InputArrayInt = new int[InDims];
 			}
 			for (int c = 0; c < OutDims; c++) {
 				WeightArray[c] = new float[InDims];
+				WeightArrayInt[c] = new int[InDims];
 			}
 			float invsqrt = (float)(1f / Math.Sqrt(InDims));
 			invsqrt = (float)Math.Min(0.5, invsqrt);
@@ -532,15 +541,20 @@ namespace TinyLayers {
 			if (QuantAwareTrain) {
 				if (!Quantized) Quantize();
 				for (int c = 0; c < OutDims; c++) {
-					OutputArray[c] = Matrix.Dot(InputArray, WeightArray[c]);
+					OutputArrayInt[c] = Matrix.Dot(InputArrayInt, WeightArrayInt[c], Prec);
 					switch (UseBias) {
 						case BiasType.None: break;
-						case BiasType.Shared: OutputArray[c] += Bias[0]; break;
-						case BiasType.Unique: OutputArray[c] += Bias[c]; break;
+						case BiasType.Shared: OutputArrayInt[c] += BiasInt[0]; break;
+						case BiasType.Unique: OutputArrayInt[c] += BiasInt[c]; break;
 					}
-					ActivationArray[c] = Activation.Activate(OutputActivation, OutputArray[c]);
+					ActivationArrayInt[c] = Activation.Activate(OutputActivation, OutputArrayInt[c]);
 				}
-
+				// update the FP arrays for use in backprop
+				for (int c = 0; c < OutDims; c++) {
+					// activation output is int: -127 ~ +127 for float -1 ~ +1
+					OutputArray[c] = (float)OutputArrayInt[c] / (float)QuantFactor;
+					ActivationArray[c] = (float)ActivationArrayInt[c] / (float)QuantFactor;
+				}
 			} else {
 				for (int c = 0; c < OutDims; c++) {
 					OutputArray[c] = Matrix.Dot(InputArray, WeightArray[c]);
@@ -552,6 +566,73 @@ namespace TinyLayers {
 					ActivationArray[c] = Activation.Activate(OutputActivation, OutputArray[c]);
 				}
 			}
+			/*if (!Quantized) Quantize();
+			Debug.Write("FP InputArray: ");
+			for (int c = 0; c < InDims; c++) {
+				Debug.Write(InputArray[c].ToString() + " ");
+			}
+			Debug.WriteLine("");
+			Debug.WriteLine("FP WeightArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				Debug.Write("FP Neuron " + c + ": ");
+				for (int i = 0; i < InDims; i++) {
+					Debug.Write(WeightArray[c][i].ToString() + " ");
+				}
+				Debug.WriteLine("");
+			}
+			Debug.Write("FP OutputArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				OutputArray[c] = Matrix.Dot(InputArray, WeightArray[c]);
+				Debug.Write(OutputArray[c].ToString() + " ");
+			}
+			Debug.WriteLine("");
+			Debug.Write("FP ActivationArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				ActivationArray[c] = Activation.Activate(OutputActivation, OutputArray[c]);
+				Debug.Write(ActivationArray[c].ToString() + " ");
+			}
+			Debug.WriteLine("");
+			Debug.Write("QAT InputArray: ");
+			for (int c = 0; c < InDims; c++) {
+				Debug.Write(InputArrayInt[c].ToString() + " ");
+			}
+			Debug.WriteLine("");
+			Debug.WriteLine("QAT WeightArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				Debug.Write("QAT Neuron " + c + ": ");
+				for (int i = 0; i < InDims; i++) {
+					Debug.Write(WeightArrayInt[c][i].ToString() + " ");
+				}
+				Debug.WriteLine("");
+			}
+			Debug.Write("QAT OutputArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				OutputArrayInt[c] = Matrix.Dot(InputArrayInt, WeightArrayInt[c], Prec);
+				Debug.Write(OutputArrayInt[c].ToString() + " ");
+			}
+			Debug.WriteLine("");
+			Debug.Write("QAT ActivationArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				ActivationArrayInt[c] = Activation.Activate(OutputActivation, OutputArrayInt[c]);
+				Debug.Write(ActivationArrayInt[c].ToString() + " ");
+			}
+			Debug.WriteLine("");
+			// update the FP arrays for use in backprop
+			for (int c = 0; c < OutDims; c++) {
+				// activation output is int: -127 ~ +127 for float -1 ~ +1
+				OutputArray[c] = (float)OutputArrayInt[c] / (float)QuantFactor;
+				ActivationArray[c] = (float)ActivationArrayInt[c] / (float)QuantFactor;
+			}
+			Debug.Write("Int->FP OutputArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				Debug.Write(OutputArray[c].ToString() + " ");
+			}
+			Debug.WriteLine("");
+			Debug.Write("Int->FP ActivationArray: ");
+			for (int c = 0; c < OutDims; c++) {
+				Debug.Write(ActivationArray[c].ToString() + " ");
+			}
+			Debug.WriteLine("");*/
 		}
 
 		public void Backward() {
@@ -616,7 +697,7 @@ namespace TinyLayers {
 		public void Quantize() {
 			for (int c = 0; c < OutDims; c++) {
 				for (int i = 0; i < InDims; i++) {
-					WeightArrayInt[c][i] = (int)Math.Round(WeightArray[c][i]);
+					WeightArrayInt[c][i] = (int)Math.Round(WeightArray[c][i] * QuantFactor);
 				}
 				BiasInt[c] = (int)Math.Round(Bias[c] * QuantFactor);
 			}
@@ -632,6 +713,9 @@ namespace TinyLayers {
 		}
 
 		public void Forward(float[] x) {
+			Array.Copy(x, InputArray, x.Length);
+			Array.Copy(x, OutputArray, x.Length);
+			Array.Copy(x, ActivationArray, x.Length);
 			if (QuantAwareTrain) {
 				int quantizedInput;
 				for (int i = 0; i < x.Length; i++) {
@@ -640,10 +724,6 @@ namespace TinyLayers {
 					OutputArrayInt[i] = quantizedInput;
 					ActivationArrayInt[i] = quantizedInput;
 				}
-			} else {
-				Array.Copy(x, InputArray, x.Length);
-				Array.Copy(x, OutputArray, x.Length);
-				Array.Copy(x, ActivationArray, x.Length);
 			}
 		}
 
@@ -651,6 +731,12 @@ namespace TinyLayers {
 			InputArray[0] = x;
 			OutputArray[0] = x;
 			ActivationArray[0] = x;
+			if (QuantAwareTrain) {
+				int quantizedInput = (int)(x * QuantFactor);
+				InputArrayInt[0] = quantizedInput;
+				OutputArrayInt[0] = quantizedInput;
+				ActivationArrayInt[0] = quantizedInput;
+			}
 		}
 
 		public void Backward() {
@@ -682,13 +768,6 @@ namespace TinyLayers {
 
 		public void Forward() {
 			base.Forward();
-			if (QuantAwareTrain) {
-				for (int c = 0; c < OutDims; c++) {
-					// activation output is int: -127 ~ +127 for float -1 ~ +1
-					OutputArray[c] = (float)OutputArray[c] / (float)QuantFactor;
-					ActivationArray[c] = (float)ActivationArrayInt[c] / (float)QuantFactor;
-				}
-			}
 		}
 
 		public void Backward(float y) {
