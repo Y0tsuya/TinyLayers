@@ -10,33 +10,6 @@ using TinyLayers;
 // enum LayerType { Base, Input, Dense, Output };
 // enum BiasType { None, Shared, Unique };
 // enum PointStyle { DOT, CROSS, EX };
-//---------- Basic ----------//
-// string[]? Args;
-// void AddLogInfo(string text);
-// void AddLogWarning(string text);
-// void AddLogError(string text);
-// void SetProgressIndicator(int value, int max);
-//---------- Minnow-Specific ----------//
-// void AddLog(string text);
-// void WriteConsole(string text, Color textColor);
-// void ClearConsole();
-// void SetAsciiBoxXY(int x, int y);
-// void WriteAsciiBoxXY(int x, int y, char c);
-// void WriteAsciiBoxXY(int x, int y, string s);
-// void ClearAsciiBox();
-// void UpdateAsciiBox();
-// void SetDataTableSize(int rows, int cols);
-// void SetDataTableEntry(int row, int col, string text, Color fore, Color back);
-// void SetBitmapBox1(Bitmap bmp);
-// void SetBitmapBox2(Bitmap bmp);
-// void UpdateBitmapBox1();
-// void UpdateBitmapBox2();
-// void ShowTab(int tabNum);
-// void PlotCurve(Bitmap map, SampleS[] points, Color penColor, int penWidth,
-//                RectangleF srcExtents, RectangleF dstExtents);
-// void PlotPoints(Bitmap map, SampleS[] points, Color penColor, int penWidth,
-//                PointStyle pointStyle, RectangleF srcExtents, RectangleF dstExtents);
-
 
 SampleM[] XOR = new SampleM[4];
 SampleM[] predict = new SampleM[4];
