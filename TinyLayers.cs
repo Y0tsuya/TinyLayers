@@ -146,9 +146,9 @@ namespace TinyLayers {
 			}
 			byte lutSelect = (byte)(x >> Prec);
 			int index;
-			if (lutSelect <= 0x01) index = (x >> Prec - 6);
-			else if (lutSelect <= 0x05) index = (x >> Prec - 5) + 64;
-			else index = (x >> Prec - 2) + 176;
+			if (lutSelect <= 0x00) index = (x >> Prec - 7);
+			else if (lutSelect <= 0x01) index = (x >> Prec - 6) + 64;
+			else index = (x >> Prec - 3) + 176;
 			if (index > 255) index = 255;
 			int folded = TanhLut[index];
 			if (isNegative) folded = -folded;
@@ -166,12 +166,12 @@ namespace TinyLayers {
 				SigmoidLut[i] = (int)Math.Round(y, 0) - 128;
 			}
 			for (i = 128; i < 192; i++) {
-				x = (float)i / 16f;
+				x = (float)i / 16f - 6f;
 				y = Sigmoid(x) * 255.5f;
 				SigmoidLut[i] = (int)Math.Round(y, 0) - 128;
 			}
 			for (i = 192; i < 256; i++) {
-				x = (float)i / 4f;
+				x = (float)i / 4f - 42f;
 				y = Sigmoid(x) * 255.5f;
 				SigmoidLut[i] = (int)Math.Round(y, 0) - 128;
 			}
@@ -187,12 +187,12 @@ namespace TinyLayers {
 				TanhLut[i] = (int)Math.Round(y, 0);
 			}
 			for (i = 128; i < 192; i++) {
-				x = (float)i / 64f;
+				x = (float)i / 64f - 1f;
 				y = Tanh(x) * 127f;
 				TanhLut[i] = (int)Math.Round(y, 0);
 			}
 			for (i = 192; i < 256; i++) {
-				x = (float)i / 8f;
+				x = (float)i / 8f - 22f;
 				y = Tanh(x) * 127f;
 				TanhLut[i] = (int)Math.Round(y, 0);
 			}
@@ -459,7 +459,7 @@ namespace TinyLayers {
 		public BiasType UseBias;
 		public static Random Randomizer;
 		public static int Prec = 24;    // fixed-point decimal precision
-		public int QuantFactor = 1 << Prec; // float 1.0 = int 2^16, 16.16 fixed-point
+		public static int QuantFactor = 1 << Prec; // float 1.0 = int 2^16, 16.16 fixed-point
 
 		public ActivationType OutputActivation;
 		public static float LearningRate;
